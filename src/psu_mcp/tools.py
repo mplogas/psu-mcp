@@ -13,7 +13,7 @@ Tools never raise to the MCP layer. Failures return a dict with
 from __future__ import annotations
 
 from psu_mcp.profiles import PSUConfig
-from psu_mcp.safety import Bounds
+from psu_mcp.safety import Bounds, BoundsError, check_voltage_bound
 from psu_mcp.session import psu_session
 from psu_mcp.vendors import get_vendor
 
@@ -129,3 +129,35 @@ async def tool_get_status(config: PSUConfig) -> dict:
             }
     except Exception as e:
         return _error("status_failed", str(e))
+
+
+_SET_VOLTAGE_CONFIRM_TOKEN = "I understand the voltage risk"
+
+
+async def tool_set_voltage(
+    config: PSUConfig,
+    voltage_mv: int,
+    _confirmed: str | None = None,
+) -> dict:
+    if voltage_mv < 0:
+        return _error("invalid_argument", "voltage_mv must be non-negative")
+    if _confirmed != _SET_VOLTAGE_CONFIRM_TOKEN:
+        return _error(
+            "confirmation_required",
+            "set_voltage requires _confirmed token",
+            expected_token=_SET_VOLTAGE_CONFIRM_TOKEN,
+        )
+    bounds = _bounds_from_config(config)
+    try:
+        check_voltage_bound(voltage_mv, bounds)
+    except BoundsError as e:
+        return _error("bounds_exceeded", str(e))
+
+    vendor = get_vendor(config.vendor)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            await handle.set_voltage_v_async(voltage_mv / 1000.0)
+            actual = await handle.read_vset_mv_async()
+            return {"ok": True, "vset_mv": actual}
+    except Exception as e:
+        return _error("set_voltage_failed", str(e))
