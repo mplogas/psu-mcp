@@ -75,19 +75,19 @@ class ProtocolHandle:
 
     def read_vset_mv(self) -> int:
         raw = self._query(self._vendor.cmd_read_vset.encode("ascii"))
-        return self._parse_volts_to_mv(raw)
+        return self._parse_fixed_to_milli(raw, self._vendor.cmd_read_vset)
 
     def read_iset_ma(self) -> int:
         raw = self._query(self._vendor.cmd_read_iset.encode("ascii"))
-        return self._parse_amps_to_ma(raw)
+        return self._parse_fixed_to_milli(raw, self._vendor.cmd_read_iset)
 
     def read_vout_mv(self) -> int:
         raw = self._query(self._vendor.cmd_read_vout.encode("ascii"))
-        return self._parse_volts_to_mv(raw)
+        return self._parse_fixed_to_milli(raw, self._vendor.cmd_read_vout)
 
     def read_iout_ma(self) -> int:
         raw = self._query(self._vendor.cmd_read_iout.encode("ascii"))
-        return self._parse_amps_to_ma(raw)
+        return self._parse_fixed_to_milli(raw, self._vendor.cmd_read_iout)
 
     def read_status_byte(self) -> int:
         raw = self._query(self._vendor.cmd_read_status.encode("ascii"))
@@ -105,26 +105,21 @@ class ProtocolHandle:
         time.sleep(self._vendor.write_settle_s)
 
     def _query(self, payload: bytes) -> bytes:
+        # No reset_input_buffer() before write. Korad firmware is strictly
+        # request/response with no unsolicited bytes, so there is no stale
+        # data to flush. If a SCPI vendor (Rigol, Siglent) that pushes
+        # status messages is added later, flush here -- or better, in
+        # session.py on open.
         self._serial.write(payload)
         time.sleep(self._vendor.read_settle_s)
         return self._serial.read(_READ_BUFFER_BYTES)
 
     @staticmethod
-    def _parse_volts_to_mv(raw: bytes) -> int:
+    def _parse_fixed_to_milli(raw: bytes, label: str) -> int:
         if not raw:
-            raise ProtocolError("no response to voltage query")
+            raise ProtocolError(f"no response to {label}")
         text = raw.decode("ascii", errors="replace").strip()
         try:
             return int(round(float(text) * 1000))
         except ValueError:
-            raise ProtocolError(f"failed to parse voltage from: {text!r}")
-
-    @staticmethod
-    def _parse_amps_to_ma(raw: bytes) -> int:
-        if not raw:
-            raise ProtocolError("no response to current query")
-        text = raw.decode("ascii", errors="replace").strip()
-        try:
-            return int(round(float(text) * 1000))
-        except ValueError:
-            raise ProtocolError(f"failed to parse current from: {text!r}")
+            raise ProtocolError(f"failed to parse {label} response: {text!r}")
