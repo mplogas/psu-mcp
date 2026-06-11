@@ -185,3 +185,36 @@ class FakePSU:
 @pytest.fixture
 def fake_psu() -> FakePSU:
     return FakePSU()
+
+
+from unittest.mock import patch
+
+from psu_mcp.profiles import PSUConfig, Profile
+from psu_mcp.safety import Bounds
+
+
+@pytest.fixture
+def bounds() -> Bounds:
+    return Bounds(max_voltage_mv=5000, max_current_ma=1000)
+
+
+@pytest.fixture
+def psu_config(fake_psu) -> PSUConfig:
+    return PSUConfig(
+        port="/dev/ttyACM0",
+        vendor="korad_ka3005p",
+        max_voltage_mv=5000,
+        max_current_ma=1000,
+        profiles={
+            1: Profile(slot=1, mv=3300, label="BK7231"),
+            2: Profile(slot=2, mv=3300, label="ESP_logic"),
+            3: Profile(slot=3, mv=5000, label="ESP_via_USB"),
+        },
+    )
+
+
+@pytest.fixture
+def with_psu(fake_psu):
+    """Patch the serial-open hook so tools use the FakePSU."""
+    with patch("psu_mcp.session._open_serial", return_value=fake_psu):
+        yield fake_psu
