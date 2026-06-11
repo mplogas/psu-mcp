@@ -161,3 +161,90 @@ async def tool_set_voltage(
             return {"ok": True, "vset_mv": actual}
     except Exception as e:
         return _error("set_voltage_failed", str(e))
+
+
+from psu_mcp.safety import check_current_bound
+
+
+async def tool_set_current_limit(config: PSUConfig, current_ma: int) -> dict:
+    if current_ma < 0:
+        return _error("invalid_argument", "current_ma must be non-negative")
+    bounds = _bounds_from_config(config)
+    try:
+        check_current_bound(current_ma, bounds)
+    except BoundsError as e:
+        return _error("bounds_exceeded", str(e))
+
+    vendor = get_vendor(config.vendor)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            await handle.set_current_a_async(current_ma / 1000.0)
+            actual = await handle.read_iset_ma_async()
+            return {"ok": True, "iset_ma": actual}
+    except Exception as e:
+        return _error("set_current_failed", str(e))
+
+
+async def tool_output_on(config: PSUConfig) -> dict:
+    vendor = get_vendor(config.vendor)
+    bounds = _bounds_from_config(config)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            vset = await handle.read_vset_mv_async()
+            iset = await handle.read_iset_ma_async()
+            if vset > bounds.max_voltage_mv or iset > bounds.max_current_ma:
+                return _error(
+                    "bounds_exceeded_pre_flight",
+                    f"refusing output_on: VSET={vset} mV (max {bounds.max_voltage_mv}), "
+                    f"ISET={iset} mA (max {bounds.max_current_ma})",
+                    vset_mv=vset,
+                    iset_ma=iset,
+                )
+            await handle.output_on_async()
+            return {"ok": True, "output_on": True, "vset_mv": vset, "iset_ma": iset}
+    except Exception as e:
+        return _error("output_on_failed", str(e))
+
+
+async def tool_output_off(config: PSUConfig) -> dict:
+    vendor = get_vendor(config.vendor)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            await handle.output_off_async()
+            return {"ok": True, "output_on": False}
+    except Exception as e:
+        return _error("output_off_failed", str(e))
+
+
+async def tool_recall_profile(config: PSUConfig, slot: int) -> dict:
+    vendor = get_vendor(config.vendor)
+    if slot < 1 or slot > vendor.profile_count:
+        return _error(
+            "slot_invalid",
+            f"slot {slot} out of range 1..{vendor.profile_count}",
+        )
+    bounds = _bounds_from_config(config)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            output_was_on = await handle.read_output_on_async()
+            await handle.recall_profile_async(slot)
+            vset = await handle.read_vset_mv_async()
+            iset = await handle.read_iset_ma_async()
+            if vset > bounds.max_voltage_mv or iset > bounds.max_current_ma:
+                if output_was_on:
+                    await handle.output_off_async()
+                return _error(
+                    "bounds_exceeded_post_recall",
+                    f"recall loaded VSET={vset} mV / ISET={iset} mA exceeds bounds; "
+                    f"output {'forced off' if output_was_on else 'remains off'}",
+                    vset_mv=vset,
+                    iset_ma=iset,
+                )
+            return {
+                "ok": True,
+                "slot": slot,
+                "loaded_vset_mv": vset,
+                "loaded_iset_ma": iset,
+            }
+    except Exception as e:
+        return _error("recall_failed", str(e))
