@@ -315,3 +315,79 @@ async def tool_yank_restore(
         return _error(
             "cycle_aborted_serial_drop", str(e), cycles_completed=cycles
         )
+
+
+from psu_mcp.telemetry import sample_until
+
+
+_TELEMETRY_INTERVAL_FLOOR_MS = 50
+
+
+async def tool_pulse_off_observe(
+    config: PSUConfig,
+    off_ms: int,
+    observe_ms: int,
+    sample_interval_ms: int = 50,
+) -> dict:
+    if off_ms < 0 or observe_ms < 0 or sample_interval_ms < 0:
+        return _error(
+            "invalid_argument",
+            "off_ms, observe_ms, sample_interval_ms must be non-negative",
+        )
+
+    warnings: list[str] = []
+    effective_interval = sample_interval_ms
+    if 0 < sample_interval_ms < _TELEMETRY_INTERVAL_FLOOR_MS:
+        warnings.append(
+            f"sample_interval_ms={sample_interval_ms} below honest floor "
+            f"{_TELEMETRY_INTERVAL_FLOOR_MS}ms; clamping. Korad serial round-trip "
+            f"dominates faster requests."
+        )
+        effective_interval = _TELEMETRY_INTERVAL_FLOOR_MS
+
+    vendor = get_vendor(config.vendor)
+    bounds = _bounds_from_config(config)
+    try:
+        async with psu_session(config.port, vendor) as handle:
+            vset = await handle.read_vset_mv_async()
+            iset = await handle.read_iset_ma_async()
+            if vset > bounds.max_voltage_mv or iset > bounds.max_current_ma:
+                return _error(
+                    "bounds_exceeded_pre_flight",
+                    f"refusing cycle: VSET={vset} mV (max {bounds.max_voltage_mv}), "
+                    f"ISET={iset} mA (max {bounds.max_current_ma})",
+                    vset_mv=vset,
+                    iset_ma=iset,
+                )
+
+            t0 = time.monotonic()
+            await handle.output_off_async()
+            await asyncio.sleep(off_ms / 1000.0)
+            t1 = time.monotonic()
+            await handle.output_on_async()
+            t_restore = time.monotonic()
+
+            samples = await sample_until(
+                handle, duration_ms=observe_ms, interval_ms=effective_interval
+            )
+
+            return {
+                "ok": True,
+                "cycle": {
+                    "off_ms_requested": off_ms,
+                    "off_ms_actual": int((t1 - t0) * 1000),
+                    "on_at_ms": int((t_restore - t0) * 1000),
+                },
+                "telemetry": [
+                    {"t_ms": s.t_ms, "vout_mv": s.vout_mv, "iout_ma": s.iout_ma}
+                    for s in samples
+                ],
+                "warnings": warnings,
+            }
+    except Exception as e:
+        try:
+            async with psu_session(config.port, vendor) as h2:
+                await h2.output_off_async()
+        except Exception:
+            pass
+        return _error("cycle_aborted_serial_drop", str(e))
