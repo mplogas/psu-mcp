@@ -59,3 +59,28 @@ class TestPulseOffObserve:
         )
         assert result["ok"] is False
         assert result["error"] == "invalid_argument"
+
+
+class TestPulseOffObserveLogging:
+    async def test_logs_telemetry_to_engagement_dir(
+        self, with_psu, psu_config, tmp_path, monkeypatch
+    ):
+        import json
+
+        monkeypatch.setenv("PIDEV_ENGAGEMENTS_DIR", str(tmp_path))
+        with_psu.vset_mv = 3300
+        result = await tool_pulse_off_observe(
+            psu_config,
+            off_ms=80,
+            observe_ms=150,
+            sample_interval_ms=50,
+            engagement_name="bench",
+        )
+        assert result["ok"] is True
+        log_path = tmp_path / "bench" / "uart" / "logs" / "psu.jsonl"
+        assert log_path.exists()
+        entry = json.loads(log_path.read_text().strip())
+        assert entry["tool"] == "pulse_off_observe"
+        # Full telemetry array is in the log entry, not just a summary
+        assert len(entry["result"]["telemetry"]) >= 1
+        assert entry["result"]["telemetry"][0]["t_ms"] == 0

@@ -92,7 +92,8 @@ TOOL_DEFINITIONS: list[types.Tool] = [
             "Atomic power cycle: output_off, sleep(off_ms), output_on, sleep(on_ms). "
             "Optional `repeat` for multi-pulse entry patterns; repeat>1 requires "
             "on_ms>0. Pre-flight check at tool entry refuses if live VSET does "
-            "not match a declared profile."
+            "not match a declared profile. Optional engagement_name / project_path "
+            "append a JSONL log line to <engagement>/uart/logs/psu.jsonl."
         ),
         inputSchema={
             "type": "object",
@@ -100,6 +101,8 @@ TOOL_DEFINITIONS: list[types.Tool] = [
                 "off_ms": {"type": "integer", "minimum": 0},
                 "on_ms": {"type": "integer", "minimum": 0, "default": 0},
                 "repeat": {"type": "integer", "minimum": 1, "default": 1},
+                "engagement_name": {"type": "string"},
+                "project_path": {"type": "string"},
             },
             "required": ["off_ms"],
             "additionalProperties": False,
@@ -110,7 +113,9 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Atomic: profile check, output_off, sleep(off_ms), output_on, sample "
             "VOUT/IOUT at sample_interval_ms for observe_ms. Returns timeseries "
-            "(t_ms relative to restore). Honest sampling floor 50ms."
+            "(t_ms relative to restore). Honest sampling floor 50ms. Optional "
+            "engagement_name / project_path append a JSONL log line to "
+            "<engagement>/uart/logs/psu.jsonl, including the full telemetry array."
         ),
         inputSchema={
             "type": "object",
@@ -118,6 +123,8 @@ TOOL_DEFINITIONS: list[types.Tool] = [
                 "off_ms": {"type": "integer", "minimum": 0},
                 "observe_ms": {"type": "integer", "minimum": 0},
                 "sample_interval_ms": {"type": "integer", "minimum": 0, "default": 50},
+                "engagement_name": {"type": "string"},
+                "project_path": {"type": "string"},
             },
             "required": ["off_ms", "observe_ms"],
             "additionalProperties": False,
@@ -155,6 +162,8 @@ async def call_tool(name: str, args: dict) -> dict:
             off_ms=int(args["off_ms"]),
             on_ms=int(args.get("on_ms", 0)),
             repeat=int(args.get("repeat", 1)),
+            engagement_name=args.get("engagement_name"),
+            project_path=args.get("project_path"),
         )
     if name == "pulse_off_observe":
         return await tool_pulse_off_observe(
@@ -162,6 +171,8 @@ async def call_tool(name: str, args: dict) -> dict:
             off_ms=int(args["off_ms"]),
             observe_ms=int(args["observe_ms"]),
             sample_interval_ms=int(args.get("sample_interval_ms", 50)),
+            engagement_name=args.get("engagement_name"),
+            project_path=args.get("project_path"),
         )
     return {
         "ok": False,

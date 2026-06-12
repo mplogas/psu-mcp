@@ -101,6 +101,36 @@ Schema:
 }
 ```
 
+## Engagement logging (optional)
+
+`yank_restore` and `pulse_off_observe` accept optional `engagement_name` and `project_path` arguments. When either is provided, the tool appends a JSONL line per invocation to `<engagement>/uart/logs/psu.jsonl`. The line includes the full result payload -- cycle log for yanks, telemetry array for pulse observations -- so the engagement folder accumulates raw data for later analysis (chip-family signature library, post-mortem evidence, drift detection).
+
+Resolution rules:
+
+- `project_path` (absolute) -> `<project_path>/uart/logs/psu.jsonl`
+- `engagement_name` -> `$PIDEV_ENGAGEMENTS_DIR/<engagement_name>/uart/logs/psu.jsonl`
+- Both provided -> `project_path` wins
+- Neither provided -> no log; tool returns payload only
+
+Set `PIDEV_ENGAGEMENTS_DIR` in the MCP client config:
+
+```json
+{
+  "psu": {
+    "command": "/path/to/.venv/bin/python",
+    "args": ["-m", "psu_mcp"],
+    "env": {
+      "PSU_CONFIG_PATH": "/home/you/.config/psu-mcp/config.json",
+      "PIDEV_ENGAGEMENTS_DIR": "/home/you/engagements"
+    }
+  }
+}
+```
+
+If `engagement_name` is requested but the env var is not set, the tool returns successfully and adds a warning to `result["warnings"]` (the probe already happened; logging failure does not abort it).
+
+Resolution: 10 Hz max sampling on `pulse_off_observe` -- enough for steady-state classification and curve-shape archival, not for sub-millisecond waveform analysis. See the spec for the trade-off discussion.
+
 ## Operator notes
 
 - Do not touch the panel during a yank or pulse sequence. The cycle is atomic against the agent but not against a hand on the M-buttons.
@@ -111,7 +141,7 @@ Schema:
 ## Tests
 
 ```bash
-pytest                          # 115 unit tests, no hardware needed
+pytest                          # 129 unit tests, no hardware needed
 pytest tests/ -m hardware       # 6 integration tests, real KA3005P required
 ```
 

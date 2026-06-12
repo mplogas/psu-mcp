@@ -21,6 +21,12 @@ from __future__ import annotations
 import asyncio
 import time
 
+from psu_mcp.engagement import (
+    EngagementLoggingError,
+    append_log_line,
+    now_iso,
+    resolve_log_path,
+)
 from psu_mcp.profiles import PSUConfig
 from psu_mcp.safety import vset_matches_declared_profile
 from psu_mcp.session import psu_session
@@ -29,6 +35,37 @@ from psu_mcp.vendors import get_vendor
 
 
 _TELEMETRY_INTERVAL_FLOOR_MS = 50
+
+
+def _log_invocation(
+    engagement_name: str | None,
+    project_path: str | None,
+    tool: str,
+    args: dict,
+    result: dict,
+) -> str | None:
+    """Append a JSONL entry to the engagement log if requested.
+
+    Returns a warning string on failure (so the caller can surface it in
+    result["warnings"]) or None on success / no-op.
+    """
+    try:
+        log_path = resolve_log_path(engagement_name, project_path)
+    except EngagementLoggingError as e:
+        return f"engagement_log_skipped: {e}"
+    if log_path is None:
+        return None
+    entry = {
+        "timestamp": now_iso(),
+        "tool": tool,
+        "args": args,
+        "result": result,
+    }
+    try:
+        append_log_line(log_path, entry)
+    except OSError as e:
+        return f"engagement_log_write_failed: {e}"
+    return None
 
 
 def _error(category: str, message: str, **details) -> dict:
@@ -208,7 +245,10 @@ async def tool_yank_restore(
     off_ms: int,
     on_ms: int = 0,
     repeat: int = 1,
+    engagement_name: str | None = None,
+    project_path: str | None = None,
 ) -> dict:
+    args = {"off_ms": off_ms, "on_ms": on_ms, "repeat": repeat}
     if off_ms < 0 or on_ms < 0:
         return _error("invalid_argument", "off_ms and on_ms must be non-negative")
     if repeat < 1:
@@ -226,12 +266,14 @@ async def tool_yank_restore(
     cycles: list[dict] = []
     try:
         async with psu_session(config.port, vendor) as handle:
-            # Pre-flight at tool entry: VSET must match a declared profile.
-            # No further checks during the cycle -- atomicity preserves
-            # the yank window.
             vset = await handle.read_vset_mv_async()
             if not vset_matches_declared_profile(vset, declared_mvs):
-                return _vset_unrecognized_error(vset, config)
+                result = _vset_unrecognized_error(vset, config)
+                _maybe_attach_log_warning(
+                    result, engagement_name, project_path,
+                    "yank_restore", args,
+                )
+                return result
 
             for _ in range(repeat):
                 t0 = time.monotonic()
@@ -247,17 +289,39 @@ async def tool_yank_restore(
                     "on_ms_actual": int((t2 - t1) * 1000),
                 })
 
-            return {"ok": True, "cycles": cycles}
+            result = {"ok": True, "cycles": cycles, "warnings": []}
+            _maybe_attach_log_warning(
+                result, engagement_name, project_path,
+                "yank_restore", args,
+            )
+            return result
     except Exception as e:
-        # Best-effort: try to leave the PSU off.
         try:
             async with psu_session(config.port, vendor) as h2:
                 await h2.output_off_async()
         except Exception:
             pass
-        return _error(
+        result = _error(
             "cycle_aborted_serial_drop", str(e), cycles_completed=cycles
         )
+        _maybe_attach_log_warning(
+            result, engagement_name, project_path,
+            "yank_restore", args,
+        )
+        return result
+
+
+def _maybe_attach_log_warning(
+    result: dict,
+    engagement_name: str | None,
+    project_path: str | None,
+    tool: str,
+    args: dict,
+) -> None:
+    """Write the engagement log line for `result`; attach warning on failure."""
+    warning = _log_invocation(engagement_name, project_path, tool, args, result)
+    if warning:
+        result.setdefault("warnings", []).append(warning)
 
 
 async def tool_pulse_off_observe(
@@ -265,7 +329,14 @@ async def tool_pulse_off_observe(
     off_ms: int,
     observe_ms: int,
     sample_interval_ms: int = 50,
+    engagement_name: str | None = None,
+    project_path: str | None = None,
 ) -> dict:
+    args = {
+        "off_ms": off_ms,
+        "observe_ms": observe_ms,
+        "sample_interval_ms": sample_interval_ms,
+    }
     if off_ms < 0 or observe_ms < 0 or sample_interval_ms < 0:
         return _error(
             "invalid_argument",
@@ -288,7 +359,12 @@ async def tool_pulse_off_observe(
         async with psu_session(config.port, vendor) as handle:
             vset = await handle.read_vset_mv_async()
             if not vset_matches_declared_profile(vset, declared_mvs):
-                return _vset_unrecognized_error(vset, config)
+                result = _vset_unrecognized_error(vset, config)
+                _maybe_attach_log_warning(
+                    result, engagement_name, project_path,
+                    "pulse_off_observe", args,
+                )
+                return result
 
             t0 = time.monotonic()
             await handle.output_off_async()
@@ -301,7 +377,7 @@ async def tool_pulse_off_observe(
                 handle, duration_ms=observe_ms, interval_ms=effective_interval
             )
 
-            return {
+            result = {
                 "ok": True,
                 "cycle": {
                     "off_ms_requested": off_ms,
@@ -314,10 +390,20 @@ async def tool_pulse_off_observe(
                 ],
                 "warnings": warnings,
             }
+            _maybe_attach_log_warning(
+                result, engagement_name, project_path,
+                "pulse_off_observe", args,
+            )
+            return result
     except Exception as e:
         try:
             async with psu_session(config.port, vendor) as h2:
                 await h2.output_off_async()
         except Exception:
             pass
-        return _error("cycle_aborted_serial_drop", str(e))
+        result = _error("cycle_aborted_serial_drop", str(e))
+        _maybe_attach_log_warning(
+            result, engagement_name, project_path,
+            "pulse_off_observe", args,
+        )
+        return result

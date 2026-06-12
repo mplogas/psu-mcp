@@ -63,3 +63,78 @@ class TestYankRestore:
         result = await tool_yank_restore(psu_config, off_ms=100, repeat=0)
         assert result["ok"] is False
         assert result["error"] == "invalid_argument"
+
+
+class TestYankRestoreLogging:
+    async def test_no_log_when_engagement_not_provided(
+        self, with_psu, psu_config, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("PIDEV_ENGAGEMENTS_DIR", str(tmp_path))
+        with_psu.vset_mv = 3300
+        result = await tool_yank_restore(psu_config, off_ms=80)
+        assert result["ok"] is True
+        # No engagement dir touched
+        assert list(tmp_path.iterdir()) == []
+
+    async def test_logs_to_engagement_dir(
+        self, with_psu, psu_config, tmp_path, monkeypatch
+    ):
+        import json
+
+        monkeypatch.setenv("PIDEV_ENGAGEMENTS_DIR", str(tmp_path))
+        with_psu.vset_mv = 3300
+        result = await tool_yank_restore(
+            psu_config, off_ms=80, engagement_name="bench-2026-06-12"
+        )
+        assert result["ok"] is True
+        log_path = tmp_path / "bench-2026-06-12" / "uart" / "logs" / "psu.jsonl"
+        assert log_path.exists()
+        entry = json.loads(log_path.read_text().strip())
+        assert entry["tool"] == "yank_restore"
+        assert entry["args"]["off_ms"] == 80
+        assert entry["result"]["ok"] is True
+        assert len(entry["result"]["cycles"]) == 1
+
+    async def test_logs_to_project_path(
+        self, with_psu, psu_config, tmp_path, monkeypatch
+    ):
+        import json
+
+        monkeypatch.delenv("PIDEV_ENGAGEMENTS_DIR", raising=False)
+        with_psu.vset_mv = 3300
+        project = tmp_path / "my-project"
+        result = await tool_yank_restore(
+            psu_config, off_ms=80, project_path=str(project)
+        )
+        assert result["ok"] is True
+        log_path = project / "uart" / "logs" / "psu.jsonl"
+        assert log_path.exists()
+        entry = json.loads(log_path.read_text().strip())
+        assert entry["tool"] == "yank_restore"
+
+    async def test_warns_when_engagement_name_without_env(
+        self, with_psu, psu_config, monkeypatch
+    ):
+        monkeypatch.delenv("PIDEV_ENGAGEMENTS_DIR", raising=False)
+        with_psu.vset_mv = 3300
+        result = await tool_yank_restore(
+            psu_config, off_ms=80, engagement_name="bench"
+        )
+        assert result["ok"] is True
+        assert any("PIDEV_ENGAGEMENTS_DIR" in w for w in result.get("warnings", []))
+
+    async def test_logs_failed_calls_too(
+        self, with_psu, psu_config, tmp_path, monkeypatch
+    ):
+        import json
+
+        monkeypatch.setenv("PIDEV_ENGAGEMENTS_DIR", str(tmp_path))
+        with_psu.vset_mv = 4000  # not in declared profiles
+        result = await tool_yank_restore(
+            psu_config, off_ms=80, engagement_name="bench"
+        )
+        assert result["ok"] is False
+        log_path = tmp_path / "bench" / "uart" / "logs" / "psu.jsonl"
+        assert log_path.exists()
+        entry = json.loads(log_path.read_text().strip())
+        assert entry["result"]["error"] == "vset_unrecognized"
