@@ -1,0 +1,13 @@
+{
+  "port": "/dev/ttyACM0",
+  "vendor": "korad_ka3005p",
+  "max_voltage_mv": 5000,
+  "max_current_ma": 1000,
+  "profiles": {
+    "1": {"mv": 3300, "label": "BK7231"},
+    "2": {"mv": 3300, "label": "ESP_logic"},
+    "3": {"mv": 5000, "label": "ESP_via_USB"},
+    "4": {"mv": 1800, "label": "core_logic"},
+    "5": {"mv": 2500, "label": "spare"}
+  }
+}

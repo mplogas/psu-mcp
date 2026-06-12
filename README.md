@@ -56,7 +56,17 @@ sudo usermod -aG dialout $USER
 
 ## Configuration
 
-Set `PSU_CONFIG_PATH` to a JSON file:
+First-time setup: copy `config.example.json` to wherever you want it and edit to match your bench (port, voltage/current bounds, and the M1-M5 slot labels that already exist on the PSU panel):
+
+```bash
+mkdir -p ~/.config/psu-mcp
+cp config.example.json ~/.config/psu-mcp/config.json
+$EDITOR ~/.config/psu-mcp/config.json
+```
+
+The MCP reads `PSU_CONFIG_PATH` at startup. Changing the file mid-session does not take effect until the MCP restarts.
+
+Schema:
 
 ```json
 {
