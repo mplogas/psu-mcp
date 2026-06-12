@@ -65,12 +65,20 @@ class TestGetStatus:
         assert result["vout_mv"] == 3300
         assert result["iout_ma"] == 500
         assert result["vendor"] == "korad_ka3005p"
-        assert result["bounds"]["max_voltage_mv"] == 5000
-        assert result["bounds"]["max_current_ma"] == 1000
+        # Declared profiles in the status payload instead of bounds.
+        assert 1 in result["declared_profiles"]
+        assert result["declared_profiles"][1]["mv"] == 3300
 
-    async def test_includes_vset_exceeds_bound_warning(self, with_psu, psu_config):
+    async def test_warns_when_vset_unrecognized(self, with_psu, psu_config):
         with_psu.output_on = False
-        with_psu.vset_mv = 6000  # exceeds bound of 5000
+        with_psu.vset_mv = 6000  # not in any declared profile (3300, 5000)
         result = await tool_get_status(psu_config)
         warnings = result.get("warnings", [])
-        assert any("VSET" in w and "exceeds" in w for w in warnings)
+        assert any("does not match" in w for w in warnings)
+
+    async def test_no_warning_when_vset_matches(self, with_psu, psu_config):
+        with_psu.output_on = False
+        with_psu.vset_mv = 3300  # in declared profiles
+        result = await tool_get_status(psu_config)
+        warnings = result.get("warnings", [])
+        assert not any("does not match" in w for w in warnings)

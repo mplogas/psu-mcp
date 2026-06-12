@@ -35,16 +35,16 @@ Single-owner principle: protocol.py is the only module that touches pyserial. se
 ## Safety tiers
 
 - **read-only**: `connect`, `list_profiles`, `get_status`
-- **allowed-write**: `recall_profile`, `set_current_limit`, `output_on`, `output_off`, `yank_restore`, `pulse_off_observe`
-- **approval-write**: `set_voltage` (requires `_confirmed` token; voltage bound still enforced)
+- **allowed-write**: `recall_profile`, `output_on`, `output_off`, `yank_restore`, `pulse_off_observe`
+- **approval-write**: (no tools in MVP)
 
-Pre-flight bounds checks happen at tool entry for output-affecting tools. The yank/pulse cycle is atomic -- no checks during the timed window.
+No MCP-side voltage or current setter. The agent has zero authority to fire a voltage that the operator did not deliberately load into a memory slot. Pre-flight checks at tool entry verify the live VSET matches one of the declared profile mv values; output-affecting tools refuse otherwise. The yank/pulse cycle is atomic -- no checks during the timed window.
 
-## Profile-as-protection
+## Profile-as-protection (the only contract)
 
-The operator pre-loads M1-M5 at the bench. The agent picks a profile slot, never a raw voltage (except via the approval-gated `set_voltage` escape hatch). Voltage authority is hardware, not config.
+The operator pre-loads M1-M5 at the bench. The agent picks a declared profile slot. Voltage authority is hardware, not config.
 
-`SAV{n}` is not exposed; the agent must not silently save new setpoints into operator-owned slots.
+`SAV{n}` is not exposed; the agent must not silently save new setpoints into operator-owned slots. `recall_profile` only accepts slots declared in config -- the agent cannot recall an undeclared slot.
 
 ## Style
 

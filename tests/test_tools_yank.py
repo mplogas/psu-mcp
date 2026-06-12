@@ -35,12 +35,13 @@ class TestYankRestore:
         assert cycle["off_ms_actual"] >= 100
         assert cycle["on_ms_actual"] >= 50
 
-    async def test_pre_flight_bounds_rejection(self, with_psu, psu_config):
-        with_psu.vset_mv = 6000  # exceeds 5000
+    async def test_pre_flight_refuses_unrecognized_vset(self, with_psu, psu_config):
+        # 4000 mV is not in declared profiles {3300, 5000}
+        with_psu.vset_mv = 4000
         with_psu.output_on = True
         result = await tool_yank_restore(psu_config, off_ms=100)
         assert result["ok"] is False
-        assert result["error"] == "bounds_exceeded_pre_flight"
+        assert result["error"] == "vset_unrecognized"
         # The PSU should not have been cycled; output still on
         assert with_psu.output_on is True
 

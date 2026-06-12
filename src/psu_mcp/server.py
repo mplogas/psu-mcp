@@ -1,13 +1,15 @@
-"""MCP server: tool definitions, call_tool dispatch, _confirmed gate.
+"""MCP server: tool definitions and call_tool dispatch.
 
 The server is a thin layer that:
-  - declares the 10 tools with input schemas (for the MCP client UI)
+  - declares the 8 tools with input schemas (for the MCP client UI)
   - loads PSUConfig once from the PSU_CONFIG_PATH env var
   - routes calls to the corresponding tools.tool_* function
   - returns the result dict as the MCP tool response
 
-All tool logic and bounds checking lives in tools.py. The server adds
-no behavior beyond dispatch.
+All tool logic lives in tools.py. The server adds no behavior beyond
+dispatch. Voltage and current setters are intentionally absent --
+profile-as-protection means the operator controls voltage at the bench,
+and the agent only recalls declared profile slots.
 """
 
 from __future__ import annotations
@@ -28,8 +30,6 @@ from psu_mcp.tools import (
     tool_output_on,
     tool_pulse_off_observe,
     tool_recall_profile,
-    tool_set_current_limit,
-    tool_set_voltage,
     tool_yank_restore,
 )
 
@@ -52,17 +52,18 @@ TOOL_DEFINITIONS: list[types.Tool] = [
     types.Tool(
         name="get_status",
         description=(
-            "Return live PSU state: vout/iout/vset/iset/output_on/vendor/bounds. "
-            "Includes warnings if VSET or ISET exceed configured bounds."
+            "Return live PSU state: vout/iout/vset/iset/output_on/vendor and "
+            "declared profiles. Warns if VSET does not match any declared "
+            "profile (output_on will refuse in that case)."
         ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
     types.Tool(
         name="recall_profile",
         description=(
-            "Load profile slot N into the active VSET/ISET. Re-reads and verifies "
-            "against bounds; forces output_off if recall pushes state over bounds "
-            "while output is on."
+            "Load operator-declared profile slot N into the active VSET/ISET. "
+            "Refuses slots not in config. Verifies loaded VSET matches the "
+            "declared mv; forces output_off if mismatch and output was on."
         ),
         inputSchema={
             "type": "object",
@@ -72,40 +73,11 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         },
     ),
     types.Tool(
-        name="set_voltage",
-        description=(
-            "Set VSET to voltage_mv. Approval-write: requires _confirmed token. "
-            "Rejected even with confirmation if voltage_mv exceeds the configured "
-            "max_voltage_mv bound."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "voltage_mv": {"type": "integer", "minimum": 0},
-                "_confirmed": {"type": "string"},
-            },
-            "required": ["voltage_mv"],
-            "additionalProperties": False,
-        },
-    ),
-    types.Tool(
-        name="set_current_limit",
-        description=(
-            "Set ISET (current limit) to current_ma. Rejected if exceeds the "
-            "configured max_current_ma."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {"current_ma": {"type": "integer", "minimum": 0}},
-            "required": ["current_ma"],
-            "additionalProperties": False,
-        },
-    ),
-    types.Tool(
         name="output_on",
         description=(
-            "Enable PSU output. Pre-flight reads live VSET/ISET; rejects if "
-            "either exceeds configured bounds."
+            "Enable PSU output. Refuses if live VSET does not match any "
+            "operator-declared profile (the agent has no way to set voltage; "
+            "VSET must arrive via recall_profile)."
         ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
@@ -119,7 +91,8 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Atomic power cycle: output_off, sleep(off_ms), output_on, sleep(on_ms). "
             "Optional `repeat` for multi-pulse entry patterns; repeat>1 requires "
-            "on_ms>0. Pre-flight bounds check at tool entry."
+            "on_ms>0. Pre-flight check at tool entry refuses if live VSET does "
+            "not match a declared profile."
         ),
         inputSchema={
             "type": "object",
@@ -135,9 +108,9 @@ TOOL_DEFINITIONS: list[types.Tool] = [
     types.Tool(
         name="pulse_off_observe",
         description=(
-            "Atomic: bounds check, output_off, sleep(off_ms), output_on, sample VOUT/IOUT "
-            "at sample_interval_ms for observe_ms. Returns timeseries (t_ms relative to "
-            "restore). Honest sampling floor 50ms."
+            "Atomic: profile check, output_off, sleep(off_ms), output_on, sample "
+            "VOUT/IOUT at sample_interval_ms for observe_ms. Returns timeseries "
+            "(t_ms relative to restore). Honest sampling floor 50ms."
         ),
         inputSchema={
             "type": "object",
@@ -172,16 +145,6 @@ async def call_tool(name: str, args: dict) -> dict:
         return await tool_get_status(config)
     if name == "recall_profile":
         return await tool_recall_profile(config, slot=int(args["slot"]))
-    if name == "set_voltage":
-        return await tool_set_voltage(
-            config,
-            voltage_mv=int(args["voltage_mv"]),
-            _confirmed=args.get("_confirmed"),
-        )
-    if name == "set_current_limit":
-        return await tool_set_current_limit(
-            config, current_ma=int(args["current_ma"])
-        )
     if name == "output_on":
         return await tool_output_on(config)
     if name == "output_off":

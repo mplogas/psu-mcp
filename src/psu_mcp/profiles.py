@@ -2,12 +2,19 @@
 
 The config file lives at PSU_CONFIG_PATH (env var) and declares:
   - port, vendor (single PSU per MCP instance)
-  - max_voltage_mv, max_current_ma (engagement-level safety bounds)
   - profiles: slot -> {mv, label} mapping for M1-M5
 
-Profiles are optional and may be sparse (declare slots 1 and 3, skip 2).
-connect verifies declared slots against live VSET; undeclared slots are
-ignored entirely (operator's call -- maybe they're playground slots).
+Profiles ARE the safety boundary. Each declared mv is the operator's
+deliberate physical loading of that PSU memory slot. There is no
+separate max-voltage / max-current config -- the set of declared
+profile mv values is what the agent is allowed to fire at a target.
+
+Profiles are required and must be non-empty. A psu-mcp with no
+profiles cannot enable output (output_on refuses unless VSET equals
+one of the declared mv values). That refusal is the contract.
+
+Profiles may be sparse (declare slots 1 and 3, skip 2). connect verifies
+declared slots against live VSET; undeclared slots are not recalled.
 """
 
 from __future__ import annotations
@@ -32,12 +39,14 @@ class Profile:
 class PSUConfig:
     port: str
     vendor: str
-    max_voltage_mv: int
-    max_current_ma: int
     profiles: dict[int, Profile] = field(default_factory=dict)
 
+    def declared_mvs(self) -> set[int]:
+        """Set of all declared profile mv values. Used by output guards."""
+        return {p.mv for p in self.profiles.values()}
 
-_REQUIRED_TOP = ("port", "vendor", "max_voltage_mv", "max_current_ma")
+
+_REQUIRED_TOP = ("port", "vendor", "profiles")
 
 
 def load_config(path: Path) -> PSUConfig:
@@ -53,9 +62,14 @@ def load_config(path: Path) -> PSUConfig:
             raise ConfigError(f"config missing required key: {key}")
 
     profiles: dict[int, Profile] = {}
-    raw_profiles = raw.get("profiles", {})
+    raw_profiles = raw["profiles"]
     if not isinstance(raw_profiles, dict):
         raise ConfigError("profiles must be a JSON object")
+    if not raw_profiles:
+        raise ConfigError(
+            "profiles must declare at least one slot -- psu-mcp cannot enable "
+            "output without a declared profile"
+        )
 
     for slot_key, body in raw_profiles.items():
         try:
@@ -77,7 +91,5 @@ def load_config(path: Path) -> PSUConfig:
     return PSUConfig(
         port=str(raw["port"]),
         vendor=str(raw["vendor"]),
-        max_voltage_mv=int(raw["max_voltage_mv"]),
-        max_current_ma=int(raw["max_current_ma"]),
         profiles=profiles,
     )

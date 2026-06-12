@@ -190,12 +190,6 @@ def fake_psu() -> FakePSU:
 from unittest.mock import patch
 
 from psu_mcp.profiles import PSUConfig, Profile
-from psu_mcp.safety import Bounds
-
-
-@pytest.fixture
-def bounds() -> Bounds:
-    return Bounds(max_voltage_mv=5000, max_current_ma=1000)
 
 
 @pytest.fixture
@@ -203,8 +197,6 @@ def psu_config(fake_psu) -> PSUConfig:
     return PSUConfig(
         port="/dev/ttyACM0",
         vendor="korad_ka3005p",
-        max_voltage_mv=5000,
-        max_current_ma=1000,
         profiles={
             1: Profile(slot=1, mv=3300, label="BK7231"),
             2: Profile(slot=2, mv=3300, label="ESP_logic"),

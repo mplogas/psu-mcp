@@ -6,20 +6,26 @@ from psu_mcp.server import call_tool, TOOL_DEFINITIONS, _load_config_from_env
 
 
 class TestToolDefinitions:
-    def test_all_ten_tools_defined(self):
+    def test_all_eight_tools_defined(self):
         names = {t.name for t in TOOL_DEFINITIONS}
         assert names == {
             "connect",
             "list_profiles",
             "get_status",
             "recall_profile",
-            "set_voltage",
-            "set_current_limit",
             "output_on",
             "output_off",
             "yank_restore",
             "pulse_off_observe",
         }
+
+    def test_set_voltage_not_defined(self):
+        names = {t.name for t in TOOL_DEFINITIONS}
+        assert "set_voltage" not in names
+
+    def test_set_current_limit_not_defined(self):
+        names = {t.name for t in TOOL_DEFINITIONS}
+        assert "set_current_limit" not in names
 
 
 class TestCallToolDispatch:
@@ -28,8 +34,6 @@ class TestCallToolDispatch:
         ("list_profiles", "psu_mcp.server.tool_list_profiles"),
         ("get_status", "psu_mcp.server.tool_get_status"),
         ("recall_profile", "psu_mcp.server.tool_recall_profile"),
-        ("set_voltage", "psu_mcp.server.tool_set_voltage"),
-        ("set_current_limit", "psu_mcp.server.tool_set_current_limit"),
         ("output_on", "psu_mcp.server.tool_output_on"),
         ("output_off", "psu_mcp.server.tool_output_off"),
         ("yank_restore", "psu_mcp.server.tool_yank_restore"),
@@ -53,8 +57,6 @@ class TestCallToolDispatch:
             "list_profiles": {},
             "get_status": {},
             "recall_profile": {"slot": 1},
-            "set_voltage": {"voltage_mv": 3300, "_confirmed": "..."},
-            "set_current_limit": {"current_ma": 500},
             "output_on": {},
             "output_off": {},
             "yank_restore": {"off_ms": 100},
@@ -73,8 +75,10 @@ class TestCallToolDispatch:
 class TestConfigLoading:
     def test_config_path_from_env(self, tmp_path, monkeypatch):
         cfg = tmp_path / "psu.json"
-        cfg.write_text('{"port":"/dev/ttyACM0","vendor":"korad_ka3005p",'
-                       '"max_voltage_mv":5000,"max_current_ma":1000}')
+        cfg.write_text(
+            '{"port":"/dev/ttyACM0","vendor":"korad_ka3005p",'
+            '"profiles":{"1":{"mv":3300,"label":"BK7231"}}}'
+        )
         monkeypatch.setenv("PSU_CONFIG_PATH", str(cfg))
         c = _load_config_from_env()
         assert c.port == "/dev/ttyACM0"

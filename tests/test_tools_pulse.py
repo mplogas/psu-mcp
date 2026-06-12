@@ -44,13 +44,14 @@ class TestPulseOffObserve:
         warnings = result.get("warnings", [])
         assert any("sample_interval" in w.lower() for w in warnings)
 
-    async def test_pre_flight_bounds_rejection(self, with_psu, psu_config):
-        with_psu.vset_mv = 6000  # exceeds
+    async def test_pre_flight_refuses_unrecognized_vset(self, with_psu, psu_config):
+        # 4000 mV is not in declared profiles {3300, 5000}
+        with_psu.vset_mv = 4000
         result = await tool_pulse_off_observe(
             psu_config, off_ms=100, observe_ms=200
         )
         assert result["ok"] is False
-        assert result["error"] == "bounds_exceeded_pre_flight"
+        assert result["error"] == "vset_unrecognized"
 
     async def test_negative_args_rejected(self, with_psu, psu_config):
         result = await tool_pulse_off_observe(
