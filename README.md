@@ -137,6 +137,8 @@ Resolution: 10 Hz max sampling on `pulse_off_observe` -- enough for steady-state
 - KA3005P firmware has no remote-lock. Last command wins between panel and serial.
 - `connect` skips profile verification if output is on -- recalling each slot would whipsaw the live voltage. Call `output_off` first.
 - If you change a profile mv at the bench (e.g., reload M3 from 5000 to 3300), update the config to match before the next engagement. The MCP loads config at startup, so changes require a restart.
+- **Timing bias on `yank_restore`:** each cycle adds ~31 ms of Korad serial settle overhead per output-state transition (write + ~30 ms post-write delay in `protocol.py`). Requesting `off_ms=1500` produces `off_ms_actual` of ~1531 ms; the bias is consistent and deterministic. Account for it if you are tuning timing windows against a HITL retry loop -- the actual time the chip spends without power is what the chip sees, not the requested value.
+- **Bootloader entry check via current readback:** after a yank, call `get_status` and read `iout_ma`. <15 mA = chip is in ROM bootloader (low quiescent, listening on UART). 40-70 mA = app firmware still running (yank failed, substrate parasitic-hold suspect on FT232/CH340 dongles -- try larger `off_ms`). ~0 mA + low `vout_mv` = chip did not power back up (yank too long). This is a free side-channel that does not need UART access.
 
 ## Tests
 
