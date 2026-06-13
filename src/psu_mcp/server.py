@@ -34,19 +34,31 @@ from psu_mcp.tools import (
 )
 
 
+# Duration class convention (consistent across pidev-sec tool MCPs):
+#   instant    -- <1 s wall clock, foregroundable always
+#   fast       -- 1-10 s, foregroundable; backgrounding adds overhead with no benefit
+#   slow       -- 10 s-2 min, background-dispatch recommended if the agent has other work
+#   very-slow  -- >2 min, background-dispatch effectively required
+# Append to every tool description as: [Duration: <class>. <Orchestration note if relevant>.]
+
+
 TOOL_DEFINITIONS: list[types.Tool] = [
     types.Tool(
         name="connect",
         description=(
             "Probe the PSU on the configured serial port. Returns vendor, "
             "current VSET/ISET, output state, and verifies declared profiles "
-            "against live VSET. Skips profile verification if output is on."
+            "against live VSET. Skips profile verification if output is on. "
+            "[Duration: fast (~1 s for the read + 1 short query per declared profile slot).]"
         ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
     types.Tool(
         name="list_profiles",
-        description="Return operator-declared profile slot labels from config.",
+        description=(
+            "Return operator-declared profile slot labels from config. "
+            "[Duration: instant (no I/O).]"
+        ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
     types.Tool(
@@ -54,7 +66,10 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Return live PSU state: vout/iout/vset/iset/output_on/vendor and "
             "declared profiles. Warns if VSET does not match any declared "
-            "profile (output_on will refuse in that case)."
+            "profile (output_on will refuse in that case). Useful as a "
+            "post-yank bootloader-entry check: read iout_ma to confirm chip "
+            "state without touching UART. "
+            "[Duration: instant (~0.5 s, 5 serial reads).]"
         ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
@@ -63,7 +78,8 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Load operator-declared profile slot N into the active VSET/ISET. "
             "Refuses slots not in config. Verifies loaded VSET matches the "
-            "declared mv; forces output_off if mismatch and output was on."
+            "declared mv; forces output_off if mismatch and output was on. "
+            "[Duration: instant (~0.3 s).]"
         ),
         inputSchema={
             "type": "object",
@@ -77,13 +93,17 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Enable PSU output. Refuses if live VSET does not match any "
             "operator-declared profile (the agent has no way to set voltage; "
-            "VSET must arrive via recall_profile)."
+            "VSET must arrive via recall_profile). "
+            "[Duration: instant (~0.2 s).]"
         ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
     types.Tool(
         name="output_off",
-        description="Disable PSU output. Always safe.",
+        description=(
+            "Disable PSU output. Always safe. "
+            "[Duration: instant (~0.1 s).]"
+        ),
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
     types.Tool(
@@ -93,7 +113,13 @@ TOOL_DEFINITIONS: list[types.Tool] = [
             "Optional `repeat` for multi-pulse entry patterns; repeat>1 requires "
             "on_ms>0. Pre-flight check at tool entry refuses if live VSET does "
             "not match a declared profile. Optional engagement_name / project_path "
-            "append a JSONL log line to <engagement>/uart/logs/psu.jsonl."
+            "append a JSONL log line to <engagement>/uart/logs/psu.jsonl. "
+            "[Duration: ~(off_ms + on_ms) * repeat + ~60 ms overhead per cycle. "
+            "Foreground only -- the timing IS the value. Orchestration: when "
+            "paired with a HITL flasher tool (ltchiptool.start_chip_info, etc.), "
+            "the flasher must be dispatched in a background subagent FIRST, then "
+            "wait ~10 s for it to open the port, then call this from main. See "
+            "skills/ltchiptool-probe.md section 3a.]"
         ),
         inputSchema={
             "type": "object",
@@ -113,9 +139,11 @@ TOOL_DEFINITIONS: list[types.Tool] = [
         description=(
             "Atomic: profile check, output_off, sleep(off_ms), output_on, sample "
             "VOUT/IOUT at sample_interval_ms for observe_ms. Returns timeseries "
-            "(t_ms relative to restore). Honest sampling floor 50ms. Optional "
+            "(t_ms relative to restore). Honest sampling floor 50 ms. Optional "
             "engagement_name / project_path append a JSONL log line to "
-            "<engagement>/uart/logs/psu.jsonl, including the full telemetry array."
+            "<engagement>/uart/logs/psu.jsonl, including the full telemetry array. "
+            "[Duration: ~off_ms + observe_ms + ~0.3 s overhead. Foreground recommended. "
+            "Same HITL-orchestration note as yank_restore if used to enter bootloader.]"
         ),
         inputSchema={
             "type": "object",
