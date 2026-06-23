@@ -39,7 +39,7 @@ _TELEMETRY_INTERVAL_FLOOR_MS = 50
 
 def _log_invocation(
     engagement_name: str | None,
-    project_path: str | None,
+    engagement_path: str | None,
     tool: str,
     args: dict,
     result: dict,
@@ -50,7 +50,7 @@ def _log_invocation(
     result["warnings"]) or None on success / no-op.
     """
     try:
-        log_path = resolve_log_path(engagement_name, project_path)
+        log_path = resolve_log_path(engagement_name, engagement_path)
     except EngagementLoggingError as e:
         return f"engagement_log_skipped: {e}"
     if log_path is None:
@@ -246,7 +246,7 @@ async def tool_yank_restore(
     on_ms: int = 0,
     repeat: int = 1,
     engagement_name: str | None = None,
-    project_path: str | None = None,
+    engagement_path: str | None = None,
 ) -> dict:
     args = {"off_ms": off_ms, "on_ms": on_ms, "repeat": repeat}
     if off_ms < 0 or on_ms < 0:
@@ -270,7 +270,7 @@ async def tool_yank_restore(
             if not vset_matches_declared_profile(vset, declared_mvs):
                 result = _vset_unrecognized_error(vset, config)
                 _maybe_attach_log_warning(
-                    result, engagement_name, project_path,
+                    result, engagement_name, engagement_path,
                     "yank_restore", args,
                 )
                 return result
@@ -291,7 +291,7 @@ async def tool_yank_restore(
 
             result = {"ok": True, "cycles": cycles, "warnings": []}
             _maybe_attach_log_warning(
-                result, engagement_name, project_path,
+                result, engagement_name, engagement_path,
                 "yank_restore", args,
             )
             return result
@@ -305,7 +305,7 @@ async def tool_yank_restore(
             "cycle_aborted_serial_drop", str(e), cycles_completed=cycles
         )
         _maybe_attach_log_warning(
-            result, engagement_name, project_path,
+            result, engagement_name, engagement_path,
             "yank_restore", args,
         )
         return result
@@ -314,12 +314,12 @@ async def tool_yank_restore(
 def _maybe_attach_log_warning(
     result: dict,
     engagement_name: str | None,
-    project_path: str | None,
+    engagement_path: str | None,
     tool: str,
     args: dict,
 ) -> None:
     """Write the engagement log line for `result`; attach warning on failure."""
-    warning = _log_invocation(engagement_name, project_path, tool, args, result)
+    warning = _log_invocation(engagement_name, engagement_path, tool, args, result)
     if warning:
         result.setdefault("warnings", []).append(warning)
 
@@ -330,7 +330,7 @@ async def tool_pulse_off_observe(
     observe_ms: int,
     sample_interval_ms: int = 50,
     engagement_name: str | None = None,
-    project_path: str | None = None,
+    engagement_path: str | None = None,
 ) -> dict:
     args = {
         "off_ms": off_ms,
@@ -361,7 +361,7 @@ async def tool_pulse_off_observe(
             if not vset_matches_declared_profile(vset, declared_mvs):
                 result = _vset_unrecognized_error(vset, config)
                 _maybe_attach_log_warning(
-                    result, engagement_name, project_path,
+                    result, engagement_name, engagement_path,
                     "pulse_off_observe", args,
                 )
                 return result
@@ -391,7 +391,7 @@ async def tool_pulse_off_observe(
                 "warnings": warnings,
             }
             _maybe_attach_log_warning(
-                result, engagement_name, project_path,
+                result, engagement_name, engagement_path,
                 "pulse_off_observe", args,
             )
             return result
@@ -403,7 +403,7 @@ async def tool_pulse_off_observe(
             pass
         result = _error("cycle_aborted_serial_drop", str(e))
         _maybe_attach_log_warning(
-            result, engagement_name, project_path,
+            result, engagement_name, engagement_path,
             "pulse_off_observe", args,
         )
         return result

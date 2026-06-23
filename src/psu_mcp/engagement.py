@@ -1,13 +1,13 @@
 """Optional engagement logging for probing tools.
 
-When `engagement_name` or `project_path` is provided to yank_restore or
+When `engagement_name` or `engagement_path` is provided to yank_restore or
 pulse_off_observe, the tool appends a JSONL line describing the call to
 `<engagement>/uart/logs/psu.jsonl`. This mirrors the pattern from
 buspirate-mcp, ltchiptool-mcp, and pm3-mcp -- psu output lands alongside
 UART artifacts so the engagement folder tells one cohesive story.
 
 Resolution:
-  - project_path (absolute)  -> <project_path>/uart/logs/psu.jsonl
+  - engagement_path (absolute)  -> <engagement_path>/uart/logs/psu.jsonl
   - engagement_name          -> <PIDEV_ENGAGEMENTS_DIR>/<engagement_name>/uart/logs/psu.jsonl
   - neither                  -> no log (tool stays a primitive)
 
@@ -34,15 +34,15 @@ class EngagementLoggingError(RuntimeError):
 
 def resolve_log_path(
     engagement_name: str | None,
-    project_path: str | None,
+    engagement_path: str | None,
 ) -> Path | None:
     """Resolve where the JSONL log should go, or None if not requested.
 
-    project_path wins if both are provided. Raises EngagementLoggingError
+    engagement_path wins if both are provided. Raises EngagementLoggingError
     if engagement_name is set but PIDEV_ENGAGEMENTS_DIR is not.
     """
-    if project_path:
-        base = Path(project_path)
+    if engagement_path:
+        base = Path(engagement_path)
     elif engagement_name:
         env_dir = os.environ.get("PIDEV_ENGAGEMENTS_DIR")
         if not env_dir:

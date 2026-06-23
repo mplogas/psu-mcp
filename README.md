@@ -103,13 +103,13 @@ Schema:
 
 ## Engagement logging (optional)
 
-`yank_restore` and `pulse_off_observe` accept optional `engagement_name` and `project_path` arguments. When either is provided, the tool appends a JSONL line per invocation to `<engagement>/uart/logs/psu.jsonl`. The line includes the full result payload -- cycle log for yanks, telemetry array for pulse observations -- so the engagement folder accumulates raw data for later analysis (chip-family signature library, post-mortem evidence, drift detection).
+`yank_restore` and `pulse_off_observe` accept optional `engagement_name` and `engagement_path` arguments. When either is provided, the tool appends a JSONL line per invocation to `<engagement>/uart/logs/psu.jsonl`. The line includes the full result payload -- cycle log for yanks, telemetry array for pulse observations -- so the engagement folder accumulates raw data for later analysis (chip-family signature library, post-mortem evidence, drift detection).
 
 Resolution rules:
 
-- `project_path` (absolute) -> `<project_path>/uart/logs/psu.jsonl`
+- `engagement_path` (absolute) -> `<engagement_path>/uart/logs/psu.jsonl`
 - `engagement_name` -> `$PIDEV_ENGAGEMENTS_DIR/<engagement_name>/uart/logs/psu.jsonl`
-- Both provided -> `project_path` wins
+- Both provided -> `engagement_path` wins
 - Neither provided -> no log; tool returns payload only
 
 Set `PIDEV_ENGAGEMENTS_DIR` in the MCP client config:
