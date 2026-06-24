@@ -95,7 +95,7 @@ class TestYankRestoreLogging:
         assert entry["result"]["ok"] is True
         assert len(entry["result"]["cycles"]) == 1
 
-    async def test_logs_to_project_path(
+    async def test_logs_to_engagement_path(
         self, with_psu, psu_config, tmp_path, monkeypatch
     ):
         import json
@@ -104,7 +104,7 @@ class TestYankRestoreLogging:
         with_psu.vset_mv = 3300
         project = tmp_path / "my-project"
         result = await tool_yank_restore(
-            psu_config, off_ms=80, project_path=str(project)
+            psu_config, off_ms=80, engagement_path=str(project)
         )
         assert result["ok"] is True
         log_path = project / "uart" / "logs" / "psu.jsonl"

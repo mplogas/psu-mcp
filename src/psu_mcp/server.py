@@ -112,7 +112,7 @@ TOOL_DEFINITIONS: list[types.Tool] = [
             "Atomic power cycle: output_off, sleep(off_ms), output_on, sleep(on_ms). "
             "Optional `repeat` for multi-pulse entry patterns; repeat>1 requires "
             "on_ms>0. Pre-flight check at tool entry refuses if live VSET does "
-            "not match a declared profile. Optional engagement_name / project_path "
+            "not match a declared profile. Optional engagement_name / engagement_path "
             "append a JSONL log line to <engagement>/uart/logs/psu.jsonl. "
             "[Duration: ~(off_ms + on_ms) * repeat + ~60 ms overhead per cycle. "
             "Foreground only -- the timing IS the value. Orchestration: when "
@@ -128,7 +128,7 @@ TOOL_DEFINITIONS: list[types.Tool] = [
                 "on_ms": {"type": "integer", "minimum": 0, "default": 0},
                 "repeat": {"type": "integer", "minimum": 1, "default": 1},
                 "engagement_name": {"type": "string"},
-                "project_path": {"type": "string"},
+                "engagement_path": {"type": "string"},
             },
             "required": ["off_ms"],
             "additionalProperties": False,
@@ -140,7 +140,7 @@ TOOL_DEFINITIONS: list[types.Tool] = [
             "Atomic: profile check, output_off, sleep(off_ms), output_on, sample "
             "VOUT/IOUT at sample_interval_ms for observe_ms. Returns timeseries "
             "(t_ms relative to restore). Honest sampling floor 50 ms. Optional "
-            "engagement_name / project_path append a JSONL log line to "
+            "engagement_name / engagement_path append a JSONL log line to "
             "<engagement>/uart/logs/psu.jsonl, including the full telemetry array. "
             "[Duration: ~off_ms + observe_ms + ~0.3 s overhead. Foreground recommended. "
             "Same HITL-orchestration note as yank_restore if used to enter bootloader.]"
@@ -152,7 +152,7 @@ TOOL_DEFINITIONS: list[types.Tool] = [
                 "observe_ms": {"type": "integer", "minimum": 0},
                 "sample_interval_ms": {"type": "integer", "minimum": 0, "default": 50},
                 "engagement_name": {"type": "string"},
-                "project_path": {"type": "string"},
+                "engagement_path": {"type": "string"},
             },
             "required": ["off_ms", "observe_ms"],
             "additionalProperties": False,
@@ -171,6 +171,16 @@ def _load_config_from_env() -> PSUConfig:
 
 
 async def call_tool(name: str, args: dict) -> dict:
+    if name in {"yank_restore", "pulse_off_observe"} and "project_path" in args:
+        return {
+            "ok": False,
+            "error": "renamed_argument",
+            "message": (
+                "project_path was renamed to engagement_path in v0.3; "
+                "pass engagement_path instead."
+            ),
+            "details": {"argument": "project_path"},
+        }
     config = _load_config_from_env()
     if name == "connect":
         return await tool_connect(config)
@@ -191,7 +201,7 @@ async def call_tool(name: str, args: dict) -> dict:
             on_ms=int(args.get("on_ms", 0)),
             repeat=int(args.get("repeat", 1)),
             engagement_name=args.get("engagement_name"),
-            project_path=args.get("project_path"),
+            engagement_path=args.get("engagement_path"),
         )
     if name == "pulse_off_observe":
         return await tool_pulse_off_observe(
@@ -200,7 +210,7 @@ async def call_tool(name: str, args: dict) -> dict:
             observe_ms=int(args["observe_ms"]),
             sample_interval_ms=int(args.get("sample_interval_ms", 50)),
             engagement_name=args.get("engagement_name"),
-            project_path=args.get("project_path"),
+            engagement_path=args.get("engagement_path"),
         )
     return {
         "ok": False,
