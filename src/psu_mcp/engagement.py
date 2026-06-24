@@ -7,7 +7,7 @@ buspirate-mcp, ltchiptool-mcp, and pm3-mcp -- psu output lands alongside
 UART artifacts so the engagement folder tells one cohesive story.
 
 Resolution:
-  - engagement_path (absolute)  -> <engagement_path>/uart/logs/psu.jsonl
+  - engagement_path  -> <engagement_path>/uart/logs/psu.jsonl
   - engagement_name          -> <PIDEV_ENGAGEMENTS_DIR>/<engagement_name>/uart/logs/psu.jsonl
   - neither                  -> no log (tool stays a primitive)
 

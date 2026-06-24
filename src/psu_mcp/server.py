@@ -171,6 +171,9 @@ def _load_config_from_env() -> PSUConfig:
 
 
 async def call_tool(name: str, args: dict) -> dict:
+    if "project_path" in args:
+        return {"error": "project_path was renamed to engagement_path in v0.3. "
+                         "Pass engagement_path instead."}
     config = _load_config_from_env()
     if name == "connect":
         return await tool_connect(config)

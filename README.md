@@ -107,7 +107,7 @@ Schema:
 
 Resolution rules:
 
-- `engagement_path` (absolute) -> `<engagement_path>/uart/logs/psu.jsonl`
+- `engagement_path` -> `<engagement_path>/uart/logs/psu.jsonl`
 - `engagement_name` -> `$PIDEV_ENGAGEMENTS_DIR/<engagement_name>/uart/logs/psu.jsonl`
 - Both provided -> `engagement_path` wins
 - Neither provided -> no log; tool returns payload only
