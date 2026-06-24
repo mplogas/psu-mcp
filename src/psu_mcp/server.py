@@ -172,10 +172,15 @@ def _load_config_from_env() -> PSUConfig:
 
 async def call_tool(name: str, args: dict) -> dict:
     if name in {"yank_restore", "pulse_off_observe"} and "project_path" in args:
-        return {"ok": False, "error": "renamed_argument",
-                "message": "project_path was renamed to engagement_path in v0.3; "
-                           "pass engagement_path instead.",
-                "details": {"argument": "project_path"}}
+        return {
+            "ok": False,
+            "error": "renamed_argument",
+            "message": (
+                "project_path was renamed to engagement_path in v0.3; "
+                "pass engagement_path instead."
+            ),
+            "details": {"argument": "project_path"},
+        }
     config = _load_config_from_env()
     if name == "connect":
         return await tool_connect(config)
