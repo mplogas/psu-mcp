@@ -48,7 +48,7 @@ The operator pre-loads M1-M5 at the bench. The agent picks a declared profile sl
 
 ## Engagement logging
 
-`yank_restore` and `pulse_off_observe` take optional `engagement_name` / `project_path` parameters. When provided, the tool appends a JSONL line per invocation to `<engagement>/uart/logs/psu.jsonl` -- pattern matches buspirate/ltchiptool/pm3. `PIDEV_ENGAGEMENTS_DIR` env var resolves engagement_name. Each line includes the full result payload, including the raw telemetry array for pulse_off_observe, for downstream corpus / drift detection / forensic use. Logging failures emit warnings rather than aborting the probe (the side-channel data is bonus, not the contract).
+`yank_restore` and `pulse_off_observe` take optional `engagement_name` / `engagement_path` parameters. When provided, the tool appends a JSONL line per invocation to `<engagement>/uart/logs/psu.jsonl` -- pattern matches buspirate/ltchiptool/pm3. `PIDEV_ENGAGEMENTS_DIR` env var resolves engagement_name. Each line includes the full result payload, including the raw telemetry array for pulse_off_observe, for downstream corpus / drift detection / forensic use. Logging failures emit warnings rather than aborting the probe (the side-channel data is bonus, not the contract).
 
 ## Style
 
